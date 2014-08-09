@@ -2,8 +2,8 @@ Package: threeboost
 Type: Package
 Title: Thresholded variable selection and prediction based on
         estimating equations
-Version: 1.0
-Date: 2014-06-18
+Version: 1.1
+Date: 2014-08-09
 Author: Julian Wolfson and Christopher Miller
 Maintainer: Julian Wolfson <julianw@umn.edu>
 Description: This package implements a thresholded version of the EEBoost
@@ -17,7 +17,7 @@ Description: This package implements a thresholded version of the EEBoost
 License: GPL-3
 Imports: Matrix
 Suggests: mvtnorm
-Packaged: 2014-06-26 22:46:58 UTC; Julian
+Packaged: 2014-08-09 14:26:54 UTC; Julian
 NeedsCompilation: no
 Repository: CRAN
-Date/Publication: 2014-06-28 01:55:23
+Date/Publication: 2014-08-11 00:18:02

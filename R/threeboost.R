@@ -13,7 +13,7 @@
 #' @param maxit Maximum number of iterations. Default is 1000.
 #' @param itertrack Indicates whether or not diagnostic information should be printed out at each iteration. Default is \code{FALSE}.
 #' @param reportinterval If \code{itertrack} is \code{TRUE}, how many iterations the algorithm should wait between each diagnostic report.
-#' @param stop.rule Rule for stopping the iterations before \code{maxit} is reached. Possible values are \code{"on.repeat"}, \code{"abs.change"}, and \code{"pct.change"}.
+#' @param stop.rule Rule for stopping the iterations before \code{maxit} is reached. Possible values are \code{"on.repeat"} and \code{"pct.change"}.
 #' See 'Details' for more information.
 #' @param thresh Threshold parameter for ThrEEBoost.
 #' 
@@ -31,7 +31,7 @@
 #' before \code{maxit} is reached. The user can request this feature by setting \code{stop.rule} to one of the following options:
 #' 
 #' \itemize{
-#' \item \code{"on.repeat"}: Sometimes, ThrEEBoost will alternate between stepping on the same two directions, usually indicating numerical problems. Setting \code{stop.rule="on.repeat"} will terminate the algorithm if this happens.
+#' \item \code{"on.repeat"}: Sometimes, ThrEEBoost will alternate between stepping on the same two directions, usually indicating numerical problems. Setting \code{stop.rule="on.oscillate"} will terminate the algorithm if this happens.
 #' \item \code{"pct.change"}: Stop if, for conseuctive iterations, the sum of the magnitudes of the elements of the estimating equation changes by < 1\%. 
 #' }
 #' 
@@ -64,11 +64,16 @@
 #' } else { stop('Need mvtnorm package to generate correlated example data.') }
 #' 
 #' ## Define the Gaussian GEE estimating function with independence working correlation
-#' EE.fn.ind <- function(Y,X,b) { 
+#' mu.Lin <- function(eta){eta}
+#' g.Lin <- function(m){m}
+#' v.Lin <- function(eta){rep(1,length(eta))}
+#'
+#'  EE.fn.ind <- function(Y,X,b) { 
 #'  ee.GEE(Y,X,b,
-#'  mu.Y=function(eta){eta},
-#'  v.Y=function(eta){rep(1,length(eta))},
-#'  aux=ee.GEE.aux(Y,X,b,indiv.index,mu.Y=function(eta){eta},v.Y=function(eta){rep(1,length(eta))}),
+#'  mu.Y=mu.Lin,
+#'  g.Y=g.Lin,
+#'  v.Y=v.Lin,
+#'  aux=function(...) { ee.GEE.aux(...,mu.Y=mu.Lin,g.Y=g.Lin,v.Y=v.Lin) },
 #'  id=indiv.index,
 #'  corstr="ind")
 #' }
@@ -87,9 +92,12 @@
 #' 
 threeboost <- function(Y,X,EE.fn,b.init=rep(0,ncol(X)),eps=0.01,maxit=1000,itertrack=FALSE,reportinterval=1,stop.rule="on.repeat",thresh=1) {
   
+  Y <- as.vector(Y)
+  X <- as.matrix(X)
+  
   if(thresh < 0 | thresh > 1) { stop('ERROR: Threshold must be between 0 and 1.')}
   
-  b.new <- b.init
+  b.new <- b.old <- b.init
   ee.val <- rep(0,length(b.new))
   it <- 1
   
@@ -101,10 +109,11 @@ threeboost <- function(Y,X,EE.fn,b.init=rep(0,ncol(X)),eps=0.01,maxit=1000,itert
   }
   
   while(it <= maxit) {
+    b.old2 <- b.old
     b.old <- b.new
     ee.val.old <- ee.val
     
-    ee.val <- round(EE.fn(Y,scale.X,b.old),6) ## To counter numerical problems in the next step
+    ee.val <- round(EE.fn(Y,scale.X,b.old),8) ## To counter numerical problems in the next step
     three.val <- (abs(ee.val)>=thresh*max(abs(ee.val))) ## Threshold the estimating equation
     b.new <- b.old + eps*sign(ee.val)*three.val
     
@@ -112,17 +121,15 @@ threeboost <- function(Y,X,EE.fn,b.init=rep(0,ncol(X)),eps=0.01,maxit=1000,itert
       cat(paste("----------------\n Iteration ",it,"\n Stepping on direction ",which.max(abs(ee.val)),"\n Max abs element of EE vector: ",max(abs(ee.val)),"\n"))
       print(rbind(b.new[which(b.new!=0)],which(b.new!=0)))
     }
-    if(stop.rule=="on.repeat" & all(b.new==b.old)) {
-      print("Iterations stopped due to repeating values.")
-      print(ee.val)
+    if(stop.rule=="on.repeat" & ( all(b.new==b.old2) | all(b.new==b.old))) {
+      print(paste("Stopped due to oscillating values at iteration",it))
       B[it,] <- b.new
-      return(B)
+      return(B[1:it,])
     }
-    
     if(stop.rule=="pct.change" & (sum(abs(ee.val))-sum(abs(ee.val.old)))/sum(abs(ee.val.old)) < 0.01) {
-      print("Iterations stopped due to < 1% change in sum of absolute EE elements")
+      print(paste("Stopped due to < 1% change in sum of absolute EE elements at iteration",it))
       B[it,] <- b.new
-      return(B)
+      return(B[1:it,])
     }
     B[it,] <- b.new
     it <- it+1

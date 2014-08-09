@@ -61,7 +61,6 @@
 #' 
 #' ## Run EEBoost (w/ indep working correlation)
 #' results.lin <- geeboost(Y,X,id=indiv.index,maxit=1000)
-#' ## Not run
 #' \dontrun{
 #'  results.bin <- geeboost(Y.bin,X,id=indiv.index,family="binomial",maxit=1000)
 #'  results.pois <- geeboost(Y.pois,X,id=indiv.index,family="poisson",maxit=1000,traceplot=TRUE)
@@ -82,24 +81,43 @@ geeboost <- function(Y,X,id=1:length(Y),family="gaussian",corstr="ind",traceplot
                    gaussian = ee.GEELin.aux,
                    binomial = ee.GEEBin.aux,
                    poisson = ee.GEEPois.aux)
-  
+  mu.fn <- switch(family,
+                  gaussian = mu.Lin,
+                  binomial = mu.Bin,
+                  poisson = mu.Pois)
+  g.fn <- function(family,
+                   gaussian = g.Lin,
+                   binomial = g.Bin,
+                   poisson = g.Pois)
+  v.fn <- switch(family,
+                 gaussian = v.Lin,
+                 binomial = v.Bin,
+                 poisson = v.Pois)
   EE.fn <- switch(corstr,
                   ind = function(Y,X,b) {
-                    main.fn(Y,X,b,aux=aux.fn(Y,X,b,id),id=id,corstr="ind") },
+                    main.fn(as.vector(Y),X,b,aux=aux.fn,id=id,corstr="ind") },
                   exch = function(Y,X,b) {
-                    main.fn(Y,X,b,aux=aux.fn(Y,X,b,id),id=id,corstr="exch") } )
+                    main.fn(as.vector(Y),X,b,aux=aux.fn,id=id,corstr="exch") } )
   
   QIC.fn <- switch(family,
                    gaussian=QIC.lin,
                    binomial=QIC.bin,
                    poisson=QIC.pois)
-  coefmat <- threeboost(Y=Y,X=X,EE.fn=EE.fn,...)
+  ##boost.out <- threeboost(Y=as.vector(Y),X=X,EE.fn=EE.fn)
+  boost.out <- threeboost(Y=as.vector(Y),X=X,EE.fn=EE.fn,...)
+  intcpts <- apply(boost.out,1,function(b) {
+    aux.par <- aux.fn(Y=as.vector(Y),X=X,b=b,id=id)
+    return(aux.par[3])
+  })
+  coefmat <- cbind(intcpts,boost.out)
+
+  X.int <- cbind(rep(1,nrow(X)),X)
   QICs <- apply(coefmat,1,function(b) {
-    QIC(Y,X,b,family=family)
+    QIC(as.vector(Y),X.int,b,family=family)
   })
   final.model <- coefmat[which.min(QICs),]
   
-  if(traceplot==TRUE) { coef_traceplot(coefmat) }
+  if(traceplot==TRUE) { coef_traceplot(coefmat[,-1]) } ## Exclude the intercept in the traceplot
   
   return(list(coefmat=coefmat,QICs=QICs,final.model=final.model))
 } 
